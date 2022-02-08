@@ -23,7 +23,7 @@ import time
 from   math import floor
 
 class tqdm:
-  def __init__ (self, iterable = None, leave = True, total = None, desc = '', *args, **kwargs):
+  def __init__(self, iterable = None, leave = True, total = None, desc = '', *args, **kwargs):
     self.desc = desc
     self.args = args
     self.kwargs = kwargs
@@ -37,19 +37,18 @@ class tqdm:
     self.it    = 0
 
     if iterable is not None:
-      self.iterable = (i for i in iterable)
+      self.iterable = iter(iterable)
 
-  def __next__ (self):
-    if self.iterable is not None:
-      self.update (1)
-
-      try:
-        return next(self.iterable)
-      except StopIteration:
-        self.close ()
-        raise
-    else:
+  def __next__(self):
+    if self.iterable is None:
       raise StopIteration
+    self.update (1)
+
+    try:
+      return next(self.iterable)
+    except StopIteration:
+      self.close ()
+      raise
 
   def __iter__ (self):
     return self
@@ -69,7 +68,7 @@ class tqdm:
     self.end = time.perf_counter ()
     print ('done:', self.it, 'its in', self.pp_duration (self.end - self.start))
 
-  def pp_duration (self, d = None):
+  def pp_duration(self, d = None):
     dys = floor (d / (24 * 60 * 60))
     d   = d - (dys * 24 * 60 * 60)
 
@@ -88,14 +87,14 @@ class tqdm:
       above = True
 
     if above or h > 0:
-      o = o + '%02dh:' % h
+      o += '%02dh:' % h
       above = True
 
     if above or m > 0:
-      o = o + '%02dm:' % m
+      o += '%02dm:' % m
       above = True
 
-    o = o + '%06.3fs' % s
+    o += '%06.3fs' % s
 
     return o
 

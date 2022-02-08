@@ -589,7 +589,7 @@ class Gmailieer:
     if (last_id > 0):
       self.vprint ('current historyId: %d' % last_id)
 
-  def full_pull (self):
+  def full_pull(self):
     total = 1
 
     self.bar_create(leave = True, total = total, desc = 'fetching messages')
@@ -632,9 +632,7 @@ class Gmailieer:
       self.bar.total = total
       self.bar_update(len(gids))
 
-      for m in gids:
-        message_gids.append(m['id'])
-
+      message_gids.extend(m['id'] for m in gids)
       if self.limit is not None and len(message_gids) >= self.limit:
         break
 
@@ -656,7 +654,7 @@ class Gmailieer:
 
       self.bar_close()
 
-    if len(message_gids) > 0:
+    if message_gids:
       # get content for new messages
       updated = self.get_content(message_gids)
 
@@ -767,16 +765,15 @@ class Gmailieer:
     Load a previous incomplete pull from resume file or create new resume file.
     """
     from .resume import ResumePull
-    if os.path.exists(f):
-      try:
-        return ResumePull.load(f)
-      except ex:
-        self.vprint("failed to load resume file, creating new: %s" % ex)
-        return ResumePull.new(f, lastid)
-    else:
+    if not os.path.exists(f):
+      return ResumePull.new(f, lastid)
+    try:
+      return ResumePull.load(f)
+    except ex:
+      self.vprint("failed to load resume file, creating new: %s" % ex)
       return ResumePull.new(f, lastid)
 
-  def send (self, args):
+  def send(self, args):
     self.setup (args, args.dry_run, True, True)
     self.remote.get_labels ()
 
@@ -808,7 +805,7 @@ class Gmailieer:
       if not header_recipients.issuperset(cli_recipients):
           raise ValueError (
             "Recipients passed via sendmail(1) arguments, but not part of message headers: {}".format(", ".join(cli_recipients.difference(header_recipients))))
-    elif not header_recipients == cli_recipients:
+    elif header_recipients != cli_recipients:
       raise ValueError (
           "Recipients passed via sendmail(1) arguments ({}) differ from those in message headers ({}), perhaps you are missing the '-t' option?".format(", ".join(cli_recipients), ", ".join(header_recipients)))
 
