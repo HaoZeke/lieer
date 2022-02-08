@@ -79,7 +79,7 @@ class ResumePull:
       json.dump(j, fd)
 
       if os.path.exists(self.resume_file):
-        os.rename(self.resume_file, self.resume_file + '.bak')
+        os.rename(self.resume_file, f'{self.resume_file}.bak')
 
       os.rename(fd.name, self.resume_file)
 

@@ -137,23 +137,23 @@ class Local:
       self.local_trash_tag = self.json.get ('local_trash_tag', 'trash')
       self.translation_list_overlay = self.json.get ('translation_list_overlay', [])
 
-    def write (self):
-      self.json = {}
-
-      self.json['replace_slash_with_dot'] = self.replace_slash_with_dot
-      self.json['account'] = self.account
-      self.json['timeout'] = self.timeout
-      self.json['drop_non_existing_label'] = self.drop_non_existing_label
-      self.json['ignore_empty_history'] = self.ignore_empty_history
-      self.json['ignore_tags'] = list(self.ignore_tags)
-      self.json['ignore_remote_labels'] = list(self.ignore_remote_labels)
-      self.json['remove_local_messages'] = self.remove_local_messages
-      self.json['file_extension'] = self.file_extension
-      self.json['local_trash_tag'] = self.local_trash_tag
-      self.json['translation_list_overlay'] = self.translation_list_overlay
+    def write(self):
+      self.json = {
+          'replace_slash_with_dot': self.replace_slash_with_dot,
+          'account': self.account,
+          'timeout': self.timeout,
+          'drop_non_existing_label': self.drop_non_existing_label,
+          'ignore_empty_history': self.ignore_empty_history,
+          'ignore_tags': list(self.ignore_tags),
+          'ignore_remote_labels': list(self.ignore_remote_labels),
+          'remove_local_messages': self.remove_local_messages,
+          'file_extension': self.file_extension,
+          'local_trash_tag': self.local_trash_tag,
+          'translation_list_overlay': self.translation_list_overlay,
+      }
 
       if os.path.exists (self.config_f):
-        shutil.copyfile (self.config_f, self.config_f + '.bak')
+        shutil.copyfile(self.config_f, f'{self.config_f}.bak')
 
       with tempfile.NamedTemporaryFile (mode = 'w+', dir = os.path.dirname (self.config_f), delete = False) as fd:
         json.dump (self.json, fd)
@@ -183,23 +183,23 @@ class Local:
       self.remove_local_messages = r
       self.write()
 
-    def set_ignore_tags (self, t):
+    def set_ignore_tags(self, t):
       if len(t.strip ()) == 0:
         self.ignore_tags = set()
       else:
-        self.ignore_tags = set([ tt.strip () for tt in t.split(',') ])
+        self.ignore_tags = {tt.strip () for tt in t.split(',')}
 
       self.write ()
 
-    def set_ignore_remote_labels (self, t):
+    def set_ignore_remote_labels(self, t):
       if len(t.strip ()) == 0:
         self.ignore_remote_labels = set()
       else:
-        self.ignore_remote_labels = set([ tt.strip () for tt in t.split(',') ])
+        self.ignore_remote_labels = {tt.strip () for tt in t.split(',')}
 
       self.write ()
 
-    def set_file_extension (self, t):
+    def set_file_extension(self, t):
       try:
         with tempfile.NamedTemporaryFile (dir = os.path.dirname (self.config_f), suffix = t) as _:
           pass
@@ -207,7 +207,7 @@ class Local:
         self.file_extension = t.strip ()
         self.write ()
       except OSError:
-        print ("Failed creating test file with file extension: " + t + ", not set.")
+        print(f'Failed creating test file with file extension: {t}, not set.')
         raise
 
     def set_local_trash_tag (self, t):
@@ -272,14 +272,11 @@ class Local:
         self.write ()
         config.write ()
 
-    def write (self):
-      self.json = {}
-
-      self.json['last_historyId'] = self.last_historyId
-      self.json['lastmod'] = self.lastmod
+    def write(self):
+      self.json = {'last_historyId': self.last_historyId, 'lastmod': self.lastmod}
 
       if os.path.exists (self.state_f):
-        shutil.copyfile (self.state_f, self.state_f + '.bak')
+        shutil.copyfile(self.state_f, f'{self.state_f}.bak')
 
       with tempfile.NamedTemporaryFile (mode = 'w+', dir = os.path.dirname (self.state_f), delete = False) as fd:
         json.dump (self.json, fd)
@@ -311,7 +308,7 @@ class Local:
     self.translate_labels = Local.translate_labels_default.copy()
     self.labels_translate = Local.labels_translate_default.copy()
 
-  def load_repository (self, block = False):
+  def load_repository(self, block = False):
     """
     Loads the current local repository
 
@@ -321,8 +318,8 @@ class Local:
     if not os.path.exists (self.config_f):
       raise Local.RepositoryException ('local repository not initialized: could not find config file')
 
-    if any ([not os.path.exists (os.path.join (self.md, mail_dir))
-             for mail_dir in ('cur', 'new', 'tmp')]):
+    if any(not os.path.exists(os.path.join(self.md, mail_dir))
+           for mail_dir in ('cur', 'new', 'tmp')):
       raise Local.RepositoryException ('local repository not initialized: could not find mail dir structure')
 
     ## Check if we are in the notmuch db
@@ -371,7 +368,7 @@ class Local:
 
     self.loaded = True
 
-  def __load_cache__ (self):
+  def __load_cache__(self):
     ## The Cache:
     ##
     ## this cache is used to know which messages we have a physical copy of.
@@ -383,7 +380,7 @@ class Local:
       break
 
     for (_, _, fnames) in os.walk (os.path.join (self.md, 'new')):
-      _fnames = ( 'new/' + f for f in fnames )
+      _fnames = (f'new/{f}' for f in fnames)
       self.files.extend (_fnames)
       break
 
@@ -452,7 +449,7 @@ class Local:
         self.gids[_m] = os.path.join (new_f.parent.name, new_f.name)
         self.files.append (os.path.join (new_f.parent.name, new_f.name))
 
-  def messages_to_gids (self, msgs):
+  def messages_to_gids(self, msgs):
     """
     Gets GIDs from a list of NotmuchMessages, the returned list of tuples may contain
     the same NotmuchMessage several times for each matching file. Files outside the
@@ -464,33 +461,24 @@ class Local:
     for m in msgs:
       for fname in m.get_filenames ():
         if self.contains (fname):
-          # get gmail id
-          gid = self.__filename_to_gid__ (os.path.basename (fname))
-          if gid:
+          if gid := self.__filename_to_gid__(os.path.basename(fname)):
             gids.append (gid)
             messages.append (m)
 
     return (messages, gids)
 
-  def __filename_to_gid__ (self, fname):
-    ext = ''
-    if self.config.file_extension:
-        ext = '.' + self.config.file_extension
+  def __filename_to_gid__(self, fname):
+    ext = f'.{self.config.file_extension}' if self.config.file_extension else ''
     ext += ':2,'
 
     f = fname.rfind (ext)
     if f > 5:
       return fname[:f]
-    else:
-      print ("'%s' does not contain valid maildir delimiter, correct file name extension, or does not seem to have a valid GID, ignoring." % fname)
-      return None
+    print ("'%s' does not contain valid maildir delimiter, correct file name extension, or does not seem to have a valid GID, ignoring." % fname)
+    return None
 
-  def __make_maildir_name__ (self, m, labels):
-    # http://cr.yp.to/proto/maildir.html
-    ext = ''
-    if self.config.file_extension:
-        ext = '.' + self.config.file_extension
-
+  def __make_maildir_name__(self, m, labels):
+    ext = f'.{self.config.file_extension}' if self.config.file_extension else ''
     p = m + ext + ':'
     info = '2,'
 
@@ -507,7 +495,7 @@ class Local:
     # if 'TRASH' in labels:
     #   info += 'T'
 
-    if not 'UNREAD' in labels:
+    if 'UNREAD' not in labels:
       info += 'S'
 
     return p + info
@@ -580,7 +568,7 @@ class Local:
     # add to notmuch
     self.update_tags (m, p, db)
 
-  def update_tags (self, m, fname, db):
+  def update_tags(self, m, fname, db):
     # make sure notmuch tags reflect gmail labels
     gid = m['id']
     glabels = m.get('labelIds', [])
@@ -594,9 +582,7 @@ class Local:
         err = "error: GMail supplied a label that there exists no record for! You can `gmi set --drop-non-existing-labels` to work around the issue (https://github.com/gauteh/lieer/issues/48)"
         print (err)
         raise Local.RepositoryException (err)
-      elif ll is None:
-        pass # drop
-      else:
+      elif ll is not None:
         labels.append (ll)
 
     # remove ignored labels
@@ -659,33 +645,30 @@ class Local:
         nmsg.tags_to_maildir_flags ()
         self.__update_cache__ (nmsg)
 
-      return True
-
     else:
       # message is already in db, set local tags to match remote tags
       otags   = set(nmsg.get_tags ())
       igntags = otags & self.ignore_labels
       otags   = otags - self.ignore_labels # remove ignored tags while checking
-      if otags != set (labels):
-        labels.extend (igntags) # add back local ignored tags before adding
-        if not self.dry_run:
-          nmsg.freeze ()
-
-          nmsg.remove_all_tags ()
-          for t in labels:
-            nmsg.add_tag (t, False)
-
-          nmsg.thaw ()
-
-          nmsg.tags_to_maildir_flags ()
-          self.__update_cache__ (nmsg, (gid, fname))
-
-        else:
-          print ("(dry-run) changing tags on message: %s from: %s to: %s" % (gid, str(otags), str(labels)))
-
-        return True
-      else:
+      if otags == set(labels):
         return False
+      labels.extend (igntags) # add back local ignored tags before adding
+      if not self.dry_run:
+        nmsg.freeze ()
+
+        nmsg.remove_all_tags ()
+        for t in labels:
+          nmsg.add_tag (t, False)
+
+        nmsg.thaw ()
+
+        nmsg.tags_to_maildir_flags ()
+        self.__update_cache__ (nmsg, (gid, fname))
+
+      else:
+        print ("(dry-run) changing tags on message: %s from: %s to: %s" % (gid, str(otags), str(labels)))
+
+    return True
 
 
 

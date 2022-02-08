@@ -287,30 +287,29 @@ class Remote:
 
     msg_batch = [] # queue up received batch and send in one go to content / db routine
 
-    def _cb (rid, resp, excep):
+    def _cb(rid, resp, excep):
       nonlocal j, msg_batch
-      if excep is not None:
-        if type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 404:
-          # message could not be found this is probably a deleted message, spam or draft
-          # message since these are not included in the messages.get() query by default.
-          print ("remote: could not find remote message: %s!" % gids[j])
-          j += 1
-          return
-
-        elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 400:
-          # message id invalid, probably caused by stray files in the mail repo
-          print ("remote: message id: %s is invalid! are there any non-lieer files created in the lieer repository?" % gids[j])
-          j += 1
-          return
-
-        elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 403:
-          raise Remote.UserRateException (excep)
-
-        else:
-          raise Remote.BatchException(excep)
-      else:
+      if excep is None:
         j += 1
 
+      elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 404:
+        # message could not be found this is probably a deleted message, spam or draft
+        # message since these are not included in the messages.get() query by default.
+        print ("remote: could not find remote message: %s!" % gids[j])
+        j += 1
+        return
+
+      elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 400:
+        # message id invalid, probably caused by stray files in the mail repo
+        print ("remote: message id: %s is invalid! are there any non-lieer files created in the lieer repository?" % gids[j])
+        j += 1
+        return
+
+      elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 403:
+        raise Remote.UserRateException (excep)
+
+      else:
+        raise Remote.BatchException(excep)
       msg_batch.append (resp)
 
     while i < N:
@@ -385,7 +384,7 @@ class Remote:
           msg_batch.clear ()
 
   @__require_auth__
-  def get_message (self, gid, format = 'minimal'):
+  def get_message(self, gid, format = 'minimal'):
     """
     Get a single message
     """
@@ -395,7 +394,7 @@ class Remote:
           id = gid, format = format).execute ()
 
     except googleapiclient.errors.HttpError as excep:
-      if excep.resp.status == 403 or excep.resp.status == 500:
+      if excep.resp.status in [403, 500]:
         self.__request_done__ (False)
         return self.get_message (gid, format)
       else:
@@ -421,7 +420,7 @@ class Remote:
     self.service = discovery.build ('gmail', 'v1', http = self.http)
     self.authorized = True
 
-  def __get_credentials__ (self):
+  def __get_credentials__(self):
     """
     Gets valid user credentials from storage.
 
@@ -445,8 +444,6 @@ class Remote:
 
         flow = client.flow_from_clientsecrets(self.CLIENT_SECRET_FILE, self.SCOPES)
         flow.user_agent = self.APPLICATION_NAME
-        credentials = tools.run_flow(flow, store, flags = self.gmailieer.args)
-
       else:
         # use default id and secret
         client_id     = self.OAUTH2_CLIENT_SECRET['client_id']
@@ -461,13 +458,13 @@ class Remote:
                                        user_agent=user_agent,
                                        auth_uri=auth_uri,
                                        token_uri=token_uri)
-        credentials = tools.run_flow(flow, store, flags = self.gmailieer.args)
+      credentials = tools.run_flow(flow, store, flags = self.gmailieer.args)
 
-      print('credentials stored in ' + credential_path)
+      print(f'credentials stored in {credential_path}')
     return credentials
 
   @__require_auth__
-  def update (self, gmsg, nmsg, last_hist, force):
+  def update(self, gmsg, nmsg, last_hist, force):
     """
     Gets a message and checks which labels it should add and which to delete, returns a
     operation which can be submitted in a batch.
@@ -487,11 +484,7 @@ class Remote:
 
     gid    = gmsg['id']
 
-    found = False
-    for f in nmsg.get_filenames ():
-      if gid in f:
-        found = True
-
+    found = any(gid in f for f in nmsg.get_filenames())
     # this can happen if a draft is edited remotely and is synced before it is sent. we'll
     # just skip it and it should be resolved on the next pull.
     if not found:
@@ -509,9 +502,7 @@ class Remote:
         err = "error: GMail supplied a label that there exists no record for! You can `gmi set --drop-non-existing-labels` to work around the issue (https://github.com/gauteh/lieer/issues/48)"
         print (err)
         raise Remote.GenericException (err)
-      elif ll is None:
-        pass # drop
-      else:
+      elif ll is not None:
         labels.append (ll)
 
     # remove ignored labels
@@ -544,14 +535,13 @@ class Remote:
       add = [a.replace ('.', '/') for a in add]
       rem = [r.replace ('.', '/') for r in rem]
 
-    if len(add) > 0 or len(rem) > 0:
+    if add or rem:
       # check if this message has been changed remotely since last pull
       hist_id = int(gmsg['historyId'])
-      if hist_id > last_hist:
-        if not force:
-          print ("update: remote has changed, will not update: %s (add: %s, rem: %s) (%d > %d)" % (gid, add, rem, hist_id, last_hist))
-          self.all_updated = False
-          return None
+      if hist_id > last_hist and not force:
+        print ("update: remote has changed, will not update: %s (add: %s, rem: %s) (%d > %d)" % (gid, add, rem, hist_id, last_hist))
+        self.all_updated = False
+        return None
 
       if 'TRASH' in add:
         if 'SPAM' in add:
@@ -565,14 +555,11 @@ class Remote:
           print ("update: %s: Trying to add both SPAM and INBOX, dropping INBOX (add: %s, rem: %s)" % (gid, add, rem))
           add.remove('INBOX')
 
-      if self.dry_run:
-        print ("(dry-run) gid: %s: add: %s, remove: %s" % (gid, str(add), str(rem)))
-        return None
-      else:
+      if not self.dry_run:
         return self.__push_tags__ (gid, add, rem)
 
-    else:
-      return None
+      print ("(dry-run) gid: %s: add: %s, remove: %s" % (gid, str(add), str(rem)))
+    return None
 
   @__require_auth__
   def __push_tags__ (self, gid, add, rem):
@@ -617,28 +604,27 @@ class Remote:
 
     def _cb(rid, resp, excep):
       nonlocal j
-      if excep is not None:
-        if type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 404:
-          # message could not be found this is probably a deleted message, spam or draft
-          # message since these are not included in the messages.get() query by default.
-          print ("remote: could not find remote message: %s!" % resp)
-          j += 1
-          return
-
-        elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 400:
-          # message id invalid, probably caused by stray files in the mail repo
-          print ("remote: message id is invalid! are there any non-lieer files created in the lieer repository? %s" % resp)
-          j += 1
-          return
-
-        elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 403:
-          raise Remote.UserRateException (excep)
-
-        else:
-          raise Remote.BatchException(excep)
-      else:
+      if excep is None:
         j += 1
 
+      elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 404:
+        # message could not be found this is probably a deleted message, spam or draft
+        # message since these are not included in the messages.get() query by default.
+        print ("remote: could not find remote message: %s!" % resp)
+        j += 1
+        return
+
+      elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 400:
+        # message id invalid, probably caused by stray files in the mail repo
+        print ("remote: message id is invalid! are there any non-lieer files created in the lieer repository? %s" % resp)
+        j += 1
+        return
+
+      elif type(excep) is googleapiclient.errors.HttpError and excep.resp.status == 403:
+        raise Remote.UserRateException (excep)
+
+      else:
+        raise Remote.BatchException(excep)
       cb(resp)
 
     while i < N:
@@ -682,7 +668,7 @@ class Remote:
           raise Remote.BatchException ("cannot reduce request any further")
 
   @__require_auth__
-  def __create_label__ (self, l):
+  def __create_label__(self, l):
     """
     Creates a new label
 
@@ -699,24 +685,21 @@ class Remote:
                'labelListVisibility' : 'labelShow',
                }
 
-    if not self.dry_run:
-      self.__wait_delay__ ()
-      try:
-        lr = self.service.users ().labels ().create (userId = self.account, body = label).execute ()
-
-        return (lr['id'], l)
-
-      except googleapiclient.errors.HttpError as excep:
-        if excep.resp.status == 403 or excep.resp.status == 500:
-          self.__request_done__ (False)
-          return self.__create_label__ (l)
-        else:
-          raise
-
-      self.__request_done__ (True)
-
-    else:
+    if self.dry_run:
       return (None, None)
+    self.__wait_delay__ ()
+    try:
+      lr = self.service.users ().labels ().create (userId = self.account, body = label).execute ()
+
+      return (lr['id'], l)
+
+    except googleapiclient.errors.HttpError as excep:
+      if excep.resp.status not in [403, 500]:
+        raise
+
+      self.__request_done__ (False)
+      return self.__create_label__ (l)
+    self.__request_done__ (True)
 
 
   @__require_auth__
